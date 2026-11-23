@@ -23,7 +23,8 @@
   var S = STAYS, $ = function (id) { return document.getElementById(id); };
   $('hdr').innerHTML = S.header('stays');
   var qs = new URLSearchParams(location.search);
-  var st = { s: null, unit: '', ci: qs.get('in') || '', co: qs.get('out') || '', g: Number(qs.get('guests')) || 2, sending: false, done: null };
+  var st = { s: null, unit: '', ci: qs.get('in') || '', co: qs.get('out') || '', g: Number(qs.get('guests')) || 2, sending: false, done: null,
+    code: '', sq: null, sqKey: '', sqWant: '', codeErr: '' };
   var bp = new URLSearchParams();
   ['in', 'out', 'guests'].forEach(function (k) { if (qs.get(k)) bp.set(k, qs.get(k)); });
   var back = './' + (bp.toString() ? '?' + bp : '');
@@ -87,6 +88,28 @@
   function maxG() { var u = unitObj(); if (!u) return 1; var inc = Number(u.included) || 2; return Math.max(inc, Number(u.max) || inc); }
   function clampGuests() { st.g = Math.min(Math.max(1, st.g), maxG()); }
 
+  // CBTG (book direct): prices and discount codes come from the server (same as the CBTG website).
+  function qKey() { return [st.unit, st.ci, st.co, st.g, st.code.toUpperCase()].join('|'); }
+  function requote() {
+    var k = qKey();
+    if (!st.ci || !st.co || st.co <= st.ci || st.sqWant === k) return;
+    st.sqWant = k;
+    S.rpc('cbtg_quote', { p_option: st.unit, p_in: st.ci, p_out: st.co, p_guests: st.g, p_code: st.code }).then(function (r) {
+      if (st.sqWant !== k) return;
+      var d = r.ok ? r.data : null;
+      st.sqKey = k;
+      st.codeErr = d && d.codeError ? d.codeError : '';
+      st.sq = d && !d.error && d.total != null ? { rooms: +d.rooms, extra: +d.extra, total: +d.total, fee: +d.fee, pct: 30, nights: S.nights(st.ci, st.co),
+        discount: +d.discount || 0, code: d.code || '', dpct: d.pct || 0, fullTotal: +d.fullTotal || 0 } : null;
+      if (!st.done && !st.sending) box();
+    });
+  }
+  function curQuote() {
+    if (!st.s.direct) return S.quote(st.s, st.unit, st.ci, st.co, st.g);
+    if (st.sqKey !== qKey()) { requote(); return null; }
+    return st.sq;
+  }
+
   function box() {
     var s = st.s, el = $('box'), bar = $('bar');
     if (st.done) {
@@ -99,7 +122,7 @@
       return;
     }
     clampGuests();
-    var q = S.quote(s, st.unit, st.ci, st.co, st.g), from = S.fromPrice(s), mx = maxG();
+    var q = curQuote(), from = S.fromPrice(s), mx = maxG();
     el.innerHTML =
       '<div class="from">' + (q ? '<b>' + S.peso(q.total) + '</b> for ' + q.nights + (q.nights === 1 ? ' night' : ' nights') : (from ? 'from <b>' + S.peso(from) + '</b> night' : '')) + '</div>' +
       '<div class="fields">' +
@@ -111,18 +134,26 @@
           '<span style="display:flex;gap:8px"><button type="button" id="gm" aria-label="Fewer guests"' + (st.g <= 1 ? ' disabled' : '') + '>−</button>' +
           '<button type="button" id="gp" aria-label="More guests"' + (st.g >= mx ? ' disabled' : '') + '>+</button></span></span></label>' +
       '</div>' +
-      (q ? '<div class="quote">' +
+      (q && s.direct ? '<div class="quote">' +
+          '<div><span>Rooms · ' + q.nights + (q.nights === 1 ? ' night' : ' nights') + '</span><span>' + S.peso(q.rooms) + '</span></div>' +
+          (q.extra ? '<div><span>Extra guests</span><span>' + S.peso(q.extra) + '</span></div>' : '') +
+          (q.discount ? '<div style="color:var(--ok)"><span>Discount ' + S.esc(q.code) + ' (' + q.dpct + '%)</span><span>−' + S.peso(q.discount) + '</span></div>' : '') +
+          '<div class="tot"><span>Total</span><span>' + S.peso(q.total) + '</span></div>' +
+          '<div class="fee"><span>Reservation fee (30%)</span><span>' + S.peso(q.fee) + '</span></div></div>'
+      : q ? '<div class="quote">' +
           (q.wkN ? '<div><span>' + S.peso(q.wk) + ' × ' + q.wkN + (q.wkN === 1 ? ' night' : ' nights') + (q.weN ? ' (Sun–Thu)' : '') + '</span><span>' + S.peso(q.wk * q.wkN) + '</span></div>' : '') +
           (q.weN ? '<div><span>' + S.peso(q.we) + ' × ' + q.weN + (q.weN === 1 ? ' night' : ' nights') + ' (Fri–Sat)</span><span>' + S.peso(q.we * q.weN) + '</span></div>' : '') +
           (q.extra ? '<div><span>Extra guests: ' + q.extraGuests + ' × ' + S.peso(s.extraFee) + ' × ' + q.nights + '</span><span>' + S.peso(q.extra) + '</span></div>' : '') +
           '<div class="tot"><span>Total</span><span>' + S.peso(q.total) + '</span></div>' +
           '<div class="fee"><span>Reservation fee (' + q.pct + '%)</span><span>' + S.peso(q.fee) + '</span></div></div>'
-        : '<p class="note" style="margin:14px 0 0">Pick your dates to see the total.</p>') +
+        : '<p class="note" style="margin:14px 0 0">' + (s.direct && st.ci && st.co ? 'Checking the price…' : 'Pick your dates to see the total.') + '</p>') +
       '<form class="form" id="f" novalidate>' +
         '<label class="in">Your name<input id="nm" autocomplete="name" maxlength="80" required></label>' +
         '<label class="in">Mobile number<input id="ph" type="tel" inputmode="tel" autocomplete="tel" placeholder="0917 123 4567" maxlength="20" required></label>' +
         '<label class="in">Email (optional)<input id="em" type="email" autocomplete="email" maxlength="120"></label>' +
         '<label class="in">Message to the owner (optional)<textarea id="nt" maxlength="500" placeholder="Occasion, arrival time, questions…"></textarea></label>' +
+        (s.direct ? '<label class="in">Discount code (optional)<input id="cd" maxlength="20" autocapitalize="characters" autocomplete="off" value="' + S.esc(st.code) + '"></label>' +
+          (st.codeErr ? '<div class="err" style="margin-top:-4px">' + S.esc(st.codeErr) + '</div>' : '') : '') +
         '<div class="err" id="err" role="alert"></div>' +
         '<button class="btn" id="go" type="submit"' + (st.sending ? ' disabled' : '') + '>' + (st.sending ? 'Sending…' : 'Request to book') + '</button>' +
         '<p class="note" style="margin:0;text-align:center">You won\'t pay anything yet. The owner confirms first.</p>' +
@@ -143,6 +174,7 @@
     if (id === 'ci') { st.ci = e.target.value; if (st.ci && (!st.co || st.co <= st.ci)) st.co = S.addDays(st.ci, 1); box(); }
     else if (id === 'co') { st.co = e.target.value; box(); }
     else if (id === 'un') { st.unit = e.target.value; units(); box(); }
+    else if (id === 'cd') { st.code = e.target.value.trim(); box(); }
   });
   document.addEventListener('click', function (e) {
     var id = e.target.closest('button') && e.target.closest('button').id;
@@ -158,12 +190,14 @@
     if ((typed.nm || '').trim().length < 2) return err('Type your name.');
     var digits = (typed.ph || '').replace(/\D/g, '');
     if (digits.length < 10 || digits.length > 13) return err('Type a valid mobile number, like 0917 123 4567.');
+    if (st.s.direct && $('cd') && $('cd').value.trim() !== st.code) { st.code = $('cd').value.trim(); box(); return; }
+    if (st.s.direct && st.codeErr) return err(st.codeErr);
     st.sending = true; box();
     S.rpc('stays_request', { p_data: { listing: st.s.id, unit: st.unit, name: typed.nm.trim(), phone: typed.ph.trim(), email: (typed.em || '').trim(),
-      checkIn: st.ci, checkOut: st.co, guests: st.g, note: (typed.nt || '').trim() } }).then(function (r) {
+      checkIn: st.ci, checkOut: st.co, guests: st.g, note: (typed.nt || '').trim(), code: st.s.direct ? st.code : '' } }).then(function (r) {
       st.sending = false;
       if (!r.ok) { box(); err(r.error); return; }
-      var q = S.quote(st.s, st.unit, st.ci, st.co, st.g);
+      var q = curQuote();
       st.done = { ref: r.data.ref, phone: typed.ph.trim(), fee: r.data.fee != null ? r.data.fee : (q ? q.fee : 0) };
       box(); $('box').scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
