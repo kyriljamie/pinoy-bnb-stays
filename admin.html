@@ -59,10 +59,11 @@
   var S = STAYS, $ = function (id) { return document.getElementById(id); };
   $('hdr').innerHTML = S.header('admin');
   var KINDS = [['cabin', 'Cabins'], ['pool', 'Private pool'], ['condo', 'Condo'], ['mountain', 'Mountain view'], ['beach', 'Beach']];
+  // Same as cbtg_web_quote on the server (the server's price is the one guests are charged).
   var CBTG_UNITS = [
-    { key: 'c1', name: 'Cabin Charlotte', weekday: 7100, weekend: 9200, included: 12, max: 15 },
-    { key: 'c2', name: 'Cabin Charlie', weekday: 8000, weekend: 10400, included: 8, max: 10 },
-    { key: 'c12', name: 'Both cabins', weekday: 14300, weekend: '', included: 20, max: 25 }
+    { key: 'c1', name: 'Cabin Charlie', weekday: 8000, weekend: 10400, included: 8, max: 15 },
+    { key: 'c2', name: 'Cabin Charlotte', weekday: 7100, weekend: 9200, included: 8, max: 15 },
+    { key: 'c12', name: 'Charlie + Charlotte (both cabins)', weekday: 14300, weekend: 24000, included: 16, max: 24 }
   ];
   var key = ''; try { key = localStorage.getItem('stays.admin') || ''; } catch (e) {}
   var list = [], ed = null, ticket = null, ticketAt = 0, busy = false, delArm = false;
