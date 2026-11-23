@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pinoy BnB Stays · Private staycations in Quezon</title>
+<meta name="description" content="Private resorts, cabins and condos in Quezon. Book direct with the owner, no service fee.">
+<meta name="theme-color" content="#000000">
+<meta property="og:title" content="Pinoy BnB Stays">
+<meta property="og:description" content="Private resorts, cabins and condos in Quezon. Book direct with the owner.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 52'%3E%3Cpath d='M6 24 L28 8 L50 24 Z' fill='%23D9B45A'/%3E%3Crect x='12' y='24' width='32' height='14' fill='none' stroke='%23D9B45A' stroke-width='3'/%3E%3Cpath d='M15 38 V48 M41 38 V48 M28 38 V48' stroke='%23D9B45A' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Cormorant+Garamond:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<div class="dots" aria-hidden="true"></div>
+<div class="wrap">
+  <div id="hdr"></div>
+  <form class="search" id="search" role="search" style="margin-left:var(--pad);margin-right:var(--pad)">
+    <label class="where"><b>Where</b><input id="q" type="search" placeholder="Sariaya, Tayabas, Lucban…" autocomplete="off"></label>
+    <label><b>Check-in</b><input id="ci" type="date"></label>
+    <label><b>Check-out</b><input id="co" type="date"></label>
+    <label><b>Guests</b><input id="g" type="number" min="1" max="60" inputmode="numeric" placeholder="Add guests"></label>
+    <button class="btn" type="submit"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search</button>
+  </form>
+  <div class="tabs" role="tablist" aria-label="Kind of stay" id="tabs"></div>
+  <main>
+    <div class="head"><h1 id="title">Private staycations in Quezon</h1><span>Book direct with the owner · no service fee</span></div>
+    <div class="grid" id="grid" aria-live="polite"></div>
+    <section class="owner" id="list">
+      <div><strong>Own a resort, condo or staycation?</strong>
+        <span>List it here. Booking requests go straight into your Pinoy BnB app, with your calendar, payments and receipts.</span></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <a class="btn light" href="sms:09274466154?body=Hi%20Jay!%20I%27d%20like%20to%20list%20my%20resort%20on%20Pinoy%20BnB%20Stays.">Text Jay</a>
+        <a class="btn ghost" href="mailto:jaygeneral0@gmail.com?subject=List%20my%20resort%20on%20Pinoy%20BnB%20Stays">Email</a>
+      </div>
+    </section>
+  </main>
+  <footer><span>© <span id="yr"></span> Pinoy BnB Stays · Quezon, Philippines</span><span>Requests are sent to the owner. No payment on this site.</span></footer>
+</div>
+<script src="assets/app.js"></script>
+<script>
+(function () {
+  var S = STAYS, all = [], cat = 'all';
+  var CATS = [['all', 'All stays'], ['cabin', 'Cabins'], ['pool', 'Private pool'], ['condo', 'Condos'], ['mountain', 'Mountain view'], ['beach', 'Beach'], ['groups', 'Big groups (20+)']];
+  document.getElementById('hdr').innerHTML = S.header('stays');
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  var $ = function (id) { return document.getElementById(id); };
+  var qs = new URLSearchParams(location.search);
+  $('q').value = qs.get('q') || ''; $('ci').value = qs.get('in') || ''; $('co').value = qs.get('out') || ''; $('g').value = qs.get('guests') || '';
+  cat = qs.get('cat') || 'all';
+  $('ci').min = S.today();
+  $('ci').addEventListener('change', function () {
+    $('co').min = $('ci').value ? S.addDays($('ci').value, 1) : '';
+    if ($('ci').value && (!$('co').value || $('co').value <= $('ci').value)) $('co').value = S.addDays($('ci').value, 1);
+  });
+
+  function tabs() {
+    $('tabs').innerHTML = CATS.map(function (c) {
+      return '<button role="tab" data-c="' + c[0] + '" aria-selected="' + (c[0] === cat) + '">' + c[1] + '</button>';
+    }).join('');
+  }
+  $('tabs').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    cat = b.dataset.c; tabs(); render(); sync();
+  });
+
+  function match(s) {
+    var q = $('q').value.trim().toLowerCase(), g = Number($('g').value) || 0;
+    if (q && [s.name, s.town, s.address, s.blurb].join(' ').toLowerCase().indexOf(q) < 0) return false;
+    if (g && S.maxGuests(s) < g) return false;
+    if (cat === 'groups') return S.maxGuests(s) >= 20;
+    if (cat !== 'all' && (s.kinds || []).indexOf(cat) < 0) return false;
+    return true;
+  }
+  function link(s) {
+    var p = new URLSearchParams({ id: s.id });
+    if ($('ci').value) p.set('in', $('ci').value);
+    if ($('co').value) p.set('out', $('co').value);
+    if ($('g').value) p.set('guests', $('g').value);
+    return 'stay.html?' + p.toString();
+  }
+  function card(s, i) {
+    var photo = (s.photos || [])[0];
+    var from = S.fromPrice(s);
+    return '<a class="card" href="' + link(s) + '"><div class="ph">' +
+      (photo ? '<img src="' + S.esc(photo) + '" alt="' + S.esc(s.name) + '" loading="lazy">' : S.art(s, i)) +
+      (s.badge ? '<span class="badge">' + S.esc(s.badge) + '</span>' : (s.direct ? '<span class="badge">Book direct</span>' : '')) +
+      '</div><div><div class="l1"><strong>' + S.esc(s.name) + '</strong><span>' + S.esc(s.town || '') + '</span></div>' +
+      '<div class="bl">' + S.esc(s.blurb || '') + '</div>' +
+      (from ? '<div class="pr">from <b>' + S.peso(from) + '</b> night</div>' : '') + '</div></a>';
+  }
+  function render() {
+    var list = all.filter(match);
+    var n = all.length;
+    $('title').textContent = n ? n + (n === 1 ? ' private staycation' : ' private staycations') + ' in Quezon' : 'Private staycations in Quezon';
+    $('grid').innerHTML = list.length ? list.map(card).join('') :
+      '<div class="empty" style="grid-column:1/-1">' + (n ? 'No stays match yet. Try another town or fewer guests.' : 'New stays are coming soon.') + '</div>';
+  }
+  function sync() {
+    var p = new URLSearchParams();
+    if ($('q').value.trim()) p.set('q', $('q').value.trim());
+    if ($('ci').value) p.set('in', $('ci').value);
+    if ($('co').value) p.set('out', $('co').value);
+    if ($('g').value) p.set('guests', $('g').value);
+    if (cat !== 'all') p.set('cat', cat);
+    history.replaceState(null, '', p.toString() ? '?' + p : location.pathname);
+  }
+  $('search').addEventListener('submit', function (e) { e.preventDefault(); render(); sync(); $('grid').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+  $('q').addEventListener('input', render);
+
+  tabs();
+  $('grid').innerHTML = new Array(8).join('<div class="card skel"><div class="ph"></div></div>') + '<div class="card skel"><div class="ph"></div></div>';
+  S.rpc('stays_list').then(function (r) {
+    if (!r.ok) { $('grid').innerHTML = '<div class="empty" style="grid-column:1/-1">Could not load the stays. ' + S.esc(r.error) + '</div>'; return; }
+    all = Array.isArray(r.data) ? r.data : [];
+    render();
+  });
+})();
+</script>
+</body>
+</html>
