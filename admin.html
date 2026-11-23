@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Admin · Pinoy BnB Stays</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#000000">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Cormorant+Garamond:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+.adm{max-width:880px;margin:0 auto;padding:22px var(--pad) 120px}
+.panel{padding:20px;border-radius:20px;background:rgba(18,21,28,.96);border:1px solid var(--line);margin-bottom:16px}
+.panel h2{margin:0 0 14px;font-size:17px}
+.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.row3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:600px){.row,.row3{grid-template-columns:1fr}}
+.li{display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line2)}
+.li:last-child{border-bottom:none}
+.li .th{width:64px;height:56px;border-radius:12px;overflow:hidden;position:relative;flex:none;background:#0A1430}
+.li .th img{width:100%;height:100%;object-fit:cover}
+.li .tx{flex:1;min-width:0}
+.li .tx b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li .tx small{color:var(--muted)}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:800;margin-right:6px}
+.pill.on{background:rgba(74,222,128,.15);color:var(--ok)}.pill.off{background:#2C313C;color:var(--muted)}
+.chk{display:flex;flex-wrap:wrap;gap:8px}
+.chk label{display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:12px;border:1px solid var(--line);font-size:14px;cursor:pointer}
+.chk input{accent-color:#6A3DD8}
+.unitrow{display:grid;grid-template-columns:70px 1.4fr 1.2fr 1fr 1fr 64px 64px 40px;gap:8px;align-items:end;padding:10px 0;border-bottom:1px solid var(--line2)}
+@media (max-width:700px){.unitrow{grid-template-columns:1fr 1fr 1fr}.unitrow .nm{grid-column:span 2}}
+.unitrow .in input{padding:9px 10px;font-size:14px}
+.x{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:transparent;cursor:pointer;font-size:16px;color:var(--bad)}
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.pt{position:relative;aspect-ratio:4/3;border-radius:12px;overflow:hidden;background:#0A1430}
+.pt img{width:100%;height:100%;object-fit:cover}
+.pt .tools{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;padding:6px;background:linear-gradient(transparent,rgba(0,0,0,.8))}
+.pt .tools button{width:30px;height:30px;border-radius:15px;border:none;background:rgba(255,255,255,.92);color:#0B0F1C;font-weight:800;cursor:pointer}
+.pt .cover{position:absolute;top:6px;left:6px}
+.drop{background:transparent;display:flex;align-items:center;justify-content:center;aspect-ratio:4/3;border-radius:12px;border:1.5px dashed #3A4150;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;text-align:center;padding:8px}
+.save{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;gap:10px;justify-content:flex-end;align-items:center;padding:12px var(--pad) calc(12px + env(safe-area-inset-bottom));background:rgba(10,12,18,.97);border-top:1px solid var(--line)}
+.save .msg{flex:1;font-size:13.5px;font-weight:600}
+.msg.ok{color:var(--ok)}.msg.bad{color:var(--bad)}
+.hint{font-size:12.5px;color:var(--muted);margin:6px 0 0;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="dots" aria-hidden="true"></div>
+<div class="wrap">
+  <div id="hdr"></div>
+  <div class="adm" id="app"></div>
+</div>
+<div class="save" id="savebar" hidden></div>
+<input type="file" id="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
+<script src="assets/app.js"></script>
+<script>
+(function () {
+  var S = STAYS, $ = function (id) { return document.getElementById(id); };
+  $('hdr').innerHTML = S.header('admin');
+  var KINDS = [['cabin', 'Cabins'], ['pool', 'Private pool'], ['condo', 'Condo'], ['mountain', 'Mountain view'], ['beach', 'Beach']];
+  var CBTG_UNITS = [
+    { key: 'c1', name: 'Cabin Charlotte', weekday: 7100, weekend: 9200, included: 12, max: 15 },
+    { key: 'c2', name: 'Cabin Charlie', weekday: 8000, weekend: 10400, included: 8, max: 10 },
+    { key: 'c12', name: 'Both cabins', weekday: 14300, weekend: '', included: 20, max: 25 }
+  ];
+  var key = ''; try { key = localStorage.getItem('stays.admin') || ''; } catch (e) {}
+  var list = [], ed = null, ticket = null, ticketAt = 0, busy = false, delArm = false;
+
+  function msg(t, ok) { var m = $('savebar').querySelector('.msg'); if (m) { m.textContent = t || ''; m.className = 'msg ' + (ok ? 'ok' : 'bad'); } }
+
+  // ---------------------------------------------------------------- login and list
+  function login(err) {
+    $('savebar').hidden = true;
+    $('app').innerHTML = '<div class="panel" style="max-width:420px;margin:40px auto"><h2>Admin</h2>' +
+      '<form id="lg" class="form"><label class="in">Admin key<input id="k" type="password" autocomplete="current-password" required></label>' +
+      '<div class="err">' + S.esc(err || '') + '</div><button class="btn">Open</button></form></div>';
+    $('lg').addEventListener('submit', function (e) { e.preventDefault(); key = $('k').value.trim(); load(); });
+  }
+  function load() {
+    $('app').innerHTML = '<div class="empty">Loading…</div>';
+    S.rpc('stays_admin_list', { p_admin: key }).then(function (r) {
+      if (!r.ok) { try { localStorage.removeItem('stays.admin'); } catch (e) {} return login(r.error); }
+      try { localStorage.setItem('stays.admin', key); } catch (e) {}
+      list = r.data || []; home();
+    });
+  }
+  function home() {
+    ed = null; $('savebar').hidden = true;
+    var pub = list.filter(function (l) { return l.published; }).length;
+    $('app').innerHTML = '<div class="head"><h1>Listings</h1><span>' + pub + ' published · ' + list.length + ' of 20</span></div>' +
+      '<div class="panel">' + (list.length ? list.map(function (l, i) {
+        var d = l.data || {}, ph = (d.photos || [])[0];
+        return '<div class="li"><div class="th">' + (ph ? '<img src="' + S.esc(ph) + '" alt="">' : S.art(d, i)) + '</div>' +
+          '<div class="tx"><b>' + S.esc(d.name || l.id) + '</b><small><span class="pill ' + (l.published ? 'on">Live' : 'off">Hidden') + '</span>' +
+          S.esc(d.town || '') + ' · ' + (l.ownerKind === 'cbtg' ? 'CBTG' : (l.code ? 'code ' + S.esc(l.code) : 'no code yet')) + ' · ' + l.requests + ' requests</small></div>' +
+          '<button class="btn ghost small" data-ed="' + S.esc(l.id) + '">Edit</button></div>';
+      }).join('') : '<div class="empty">No listings yet.</div>') + '</div>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="new"' + (list.length >= 20 ? ' disabled' : '') + '>+ New listing</button>' +
+      '<a class="btn ghost" href="./" target="_blank">Open the site</a><button class="btn ghost" id="out">Sign out</button></div>';
+  }
+
+  // ---------------------------------------------------------------- editor
+  function blank() {
+    return { id: '', ownerKind: 'pbnb', code: '', published: false, sort: 100, isNew: true,
+      data: { name: '', town: '', address: '', kinds: [], badge: '', blurb: '', description: '', highlights: [], host: '',
+        checkIn: '2:00 PM', checkOut: '12:00 NN', extraFee: '', feePct: 30, houseRules: '', photos: [],
+        units: [{ key: 'u1', name: '', weekday: '', weekend: '', included: 2, max: 4 }] } };
+  }
+  function v(id) { var el = $(id); return el ? el.value : ''; }
+  function inp(id, label, val, attrs) { return '<label class="in">' + label + '<input id="' + id + '" value="' + S.esc(val == null ? '' : val) + '" ' + (attrs || '') + '></label>'; }
+
+  function editor() {
+    var l = ed, d = l.data;
+    delArm = false;
+    $('app').innerHTML = '<a class="back" href="#" id="bk">← Listings</a><h1 style="margin-bottom:16px">' + S.esc(d.name || 'New listing') + '</h1>' +
+      '<div class="panel"><h2>Listing</h2><div class="row">' +
+        inp('f_id', 'Web address name', l.id, 'placeholder="villa-rosa" autocapitalize="off"' + (l.isNew ? '' : ' readonly')) +
+        '<label class="in">Owner<select id="f_kind"><option value="pbnb"' + (l.ownerKind !== 'cbtg' ? ' selected' : '') + '>Pinoy BnB app owner</option><option value="cbtg"' + (l.ownerKind === 'cbtg' ? ' selected' : '') + '>CBTG (my cabins)</option></select></label>' +
+        inp('f_code', 'Owner\'s paid Pinoy BnB code', l.code, 'autocapitalize="characters"' + (l.ownerKind === 'cbtg' ? ' disabled' : '')) +
+        inp('f_sort', 'Order on the site (1 = first)', l.sort, 'type="number" inputmode="numeric"') +
+      '</div><p class="hint">' + (l.ownerKind === 'cbtg' ? 'CBTG requests go to your CBTG app, like the website form. Use room keys c1, c2, c12 or c23.' :
+        'Requests go to the app that uses this code. The code must be active on the owner\'s phone.') + '</p>' +
+      '<div class="chk" style="margin-top:12px"><label><input type="checkbox" id="f_pub"' + (l.published ? ' checked' : '') + '> Show on the site</label></div></div>' +
+
+      '<div class="panel"><h2>Details</h2><div class="row">' +
+        inp('f_name', 'Name', d.name, 'maxlength="60"') + inp('f_town', 'Town', d.town, 'maxlength="30"') +
+        inp('f_addr', 'Address', d.address, 'maxlength="120"') + inp('f_host', 'Host name', d.host, 'maxlength="40"') +
+        inp('f_badge', 'Badge on the photo (optional)', d.badge, 'maxlength="18" placeholder="New, Big groups…"') + inp('f_blurb', 'Short line under the name', d.blurb, 'maxlength="60" placeholder="A-frames · private pool · cinema"') +
+      '</div><div class="chk" style="margin:12px 0">' + KINDS.map(function (k) {
+        return '<label><input type="checkbox" name="kind" value="' + k[0] + '"' + ((d.kinds || []).indexOf(k[0]) >= 0 ? ' checked' : '') + '> ' + k[1] + '</label>'; }).join('') + '</div>' +
+      '<label class="in">About this stay<textarea id="f_desc" rows="5" maxlength="3000">' + S.esc(d.description) + '</textarea></label>' +
+      '<label class="in" style="margin-top:10px">What this place offers (one per line)<textarea id="f_hl" rows="5" maxlength="2000">' + S.esc((d.highlights || []).join('\n')) + '</textarea></label>' +
+      '<label class="in" style="margin-top:10px">House rules (optional)<textarea id="f_rules" rows="3" maxlength="1500">' + S.esc(d.houseRules) + '</textarea></label></div>' +
+
+      '<div class="panel"><h2>Rooms, cabins and rates</h2><div class="row3">' +
+        inp('f_in', 'Check-in time', d.checkIn, 'maxlength="12"') + inp('f_out', 'Check-out time', d.checkOut, 'maxlength="12"') +
+        inp('f_xf', 'Extra guest per night (₱)', d.extraFee, 'type="number" inputmode="numeric" min="0"') +
+        inp('f_pct', 'Reservation fee %', d.feePct, 'type="number" inputmode="numeric" min="0" max="100"') +
+      '</div><div id="units"></div><div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap"><button class="btn ghost small" id="addu">+ Add room or cabin</button>' +
+        (l.ownerKind === 'cbtg' ? '<button class="btn ghost small" id="cbtgu">Fill CBTG cabins</button>' : '') + '</div>' +
+      '<p class="hint">Weekend rate is for Friday and Saturday nights. Leave it blank to use the weekday rate.' +
+        (l.ownerKind === 'cbtg' ? '' : ' “Unit in their app” must match the unit name in the owner\'s Pinoy BnB app exactly (use + for two units, e.g. Villa A + Villa B).') + '</p></div>' +
+
+      '<div class="panel"><h2>Photos</h2><div class="photos" id="photos"></div><p class="hint">The first photo is the cover. Photos are made smaller before upload (max 1600 px).</p></div>' +
+
+      (l.isNew ? '' : '<div class="panel"><button class="btn ghost small" id="del" style="color:var(--bad);border-color:#5A2A2A">Delete listing</button></div>');
+    unitsUI(); photosUI();
+    $('savebar').hidden = false;
+    $('savebar').innerHTML = '<span class="msg"></span>' + (l.isNew ? '' : '<a class="btn ghost small" target="_blank" href="stay.html?id=' + encodeURIComponent(l.id) + '">Preview</a>') +
+      '<button class="btn small" id="sv">Save</button>';
+  }
+
+  function readForm() {
+    var l = ed, d = l.data;
+    if (l.isNew) l.id = v('f_id').trim().toLowerCase();
+    l.ownerKind = v('f_kind'); l.code = l.ownerKind === 'cbtg' ? '' : v('f_code').trim(); l.sort = Number(v('f_sort')) || 100; l.published = $('f_pub').checked;
+    d.name = v('f_name').trim(); d.town = v('f_town').trim(); d.address = v('f_addr').trim(); d.host = v('f_host').trim();
+    d.badge = v('f_badge').trim(); d.blurb = v('f_blurb').trim(); d.description = v('f_desc').trim(); d.houseRules = v('f_rules').trim();
+    d.highlights = v('f_hl').split('\n').map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 30);
+    d.kinds = [].slice.call(document.querySelectorAll('input[name=kind]:checked')).map(function (x) { return x.value; });
+    d.checkIn = v('f_in').trim(); d.checkOut = v('f_out').trim();
+    d.extraFee = v('f_xf') === '' ? '' : Number(v('f_xf')); d.feePct = v('f_pct') === '' ? 30 : Number(v('f_pct'));
+    readUnits();
+  }
+  function readUnits() {
+    var rows = document.querySelectorAll('.unitrow');
+    ed.data.units = [].map.call(rows, function (r) {
+      var g = function (n) { return r.querySelector('[data-f=' + n + ']').value.trim(); };
+      var num = function (n) { return g(n) === '' ? '' : Number(g(n)); };
+      var cb = r.querySelector('[data-f=cabins]');
+      var cabins = cb ? cb.value.split(/[+,]/).map(function (x) { return x.trim(); }).filter(Boolean) : [];
+      return { key: g('key'), name: g('name'), cabins: cabins.length ? cabins : undefined, weekday: num('weekday'), weekend: num('weekend'), included: num('included') || 2, max: num('max') || num('included') || 2 };
+    });
+  }
+  function unitsUI() {
+    $('units').innerHTML = ed.data.units.map(function (u, i) {
+      var c = function (f, lab, val, a) { return '<label class="in ' + (f === 'name' ? 'nm' : '') + '">' + lab + '<input data-f="' + f + '" value="' + S.esc(val == null ? '' : val) + '" ' + (a || '') + '></label>'; };
+      return '<div class="unitrow">' + c('key', 'Key', u.key, 'maxlength="8" autocapitalize="off"') + c('name', 'Name', u.name, 'maxlength="40"') +
+        (ed.ownerKind === 'cbtg' ? '<span></span>' : c('cabins', 'Unit in their app', (u.cabins || []).join(' + '), 'maxlength="80" placeholder="same as name"')) +
+        c('weekday', 'Weekday ₱', u.weekday, 'type="number" inputmode="numeric"') + c('weekend', 'Fri–Sat ₱', u.weekend, 'type="number" inputmode="numeric"') +
+        c('included', 'Incl.', u.included, 'type="number" inputmode="numeric"') + c('max', 'Max', u.max, 'type="number" inputmode="numeric"') +
+        '<button class="x" data-rmu="' + i + '" aria-label="Remove">✕</button></div>';
+    }).join('');
+  }
+  function photosUI() {
+    var ps = ed.data.photos || [];
+    $('photos').innerHTML = ps.map(function (p, i) {
+      return '<div class="pt"><img src="' + S.esc(p) + '" alt="">' + (i === 0 ? '<span class="badge cover">Cover</span>' : '') +
+        '<div class="tools"><button data-mv="' + i + '" data-d="-1" aria-label="Move left"' + (i === 0 ? ' disabled' : '') + '>‹</button>' +
+        '<button data-rmp="' + i + '" aria-label="Remove">✕</button><button data-mv="' + i + '" data-d="1" aria-label="Move right"' + (i === ps.length - 1 ? ' disabled' : '') + '>›</button></div></div>';
+    }).join('') + (ps.length < 20 ? '<button class="drop" id="addp">+ Add photos</button>' : '');
+  }
+
+  // Resize in the browser so phone photos upload fast.
+  function shrink(file) {
+    return new Promise(function (ok, bad) {
+      var img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function () {
+        var m = 1600, w = img.naturalWidth, h = img.naturalHeight, k = Math.min(1, m / Math.max(w, h));
+        var c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        c.toBlob(function (b) { b ? ok(b) : bad(new Error('Could not read that photo.')); }, 'image/jpeg', 0.82);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); bad(new Error('Could not read that photo.')); };
+      img.src = url;
+    });
+  }
+  function getTicket() {
+    if (ticket && Date.now() - ticketAt < 50 * 60e3) return Promise.resolve(ticket);
+    return S.rpc('stays_admin_ticket', { p_admin: key }).then(function (r) {
+      if (!r.ok) throw new Error(r.error);
+      ticket = r.data.ticket; ticketAt = Date.now(); return ticket;
+    });
+  }
+  $('file').addEventListener('change', function () {
+    var files = [].slice.call(this.files || []).slice(0, 20 - (ed.data.photos || []).length); this.value = '';
+    if (!files.length) return;
+    readForm();
+    var n = 0;
+    msg('Uploading 0 of ' + files.length + '…', true);
+    getTicket().then(function (t) {
+      return files.reduce(function (p, f) {
+        return p.then(function () {
+          return shrink(f).then(function (b) {
+            var name = (ed.id || 'new') + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + '.jpg';
+            return S.upload(t + '/' + name, b);
+          }).then(function (r) {
+            if (!r.ok) throw new Error(r.error);
+            ed.data.photos = (ed.data.photos || []).concat(r.url); n++;
+            msg('Uploading ' + n + ' of ' + files.length + '…', true); photosUI();
+          });
+        });
+      }, Promise.resolve());
+    }).then(function () { msg(n + ' photo' + (n === 1 ? '' : 's') + ' added. Tap Save to keep them.', true); })
+      .catch(function (e) { msg(e.message || 'Upload failed.'); });
+  });
+
+  function save() {
+    if (busy) return;
+    readForm();
+    var l = ed, d = l.data;
+    if (!/^[a-z0-9][a-z0-9-]{1,40}$/.test(l.id)) return msg('Web address name: small letters, numbers and dashes, e.g. villa-rosa.');
+    if (!d.name) return msg('Type the name of the stay.');
+    var bad = d.units.filter(function (u) { return !u.key || !u.name || !(u.weekday > 0); });
+    if (!d.units.length || bad.length) return msg('Every room or cabin needs a key, a name and a weekday rate.');
+    var keys = d.units.map(function (u) { return u.key; });
+    if (keys.some(function (k, i) { return keys.indexOf(k) !== i; })) return msg('Two rooms have the same key.');
+    if (l.ownerKind === 'cbtg' && keys.some(function (k) { return ['c1', 'c2', 'c12', 'c23'].indexOf(k) < 0; })) return msg('CBTG keys must be c1, c2, c12 or c23.');
+    if (l.isNew && list.some(function (x) { return x.id === l.id; })) return msg('That web address name is taken.');
+    busy = true; msg('Saving…', true);
+    S.rpc('stays_admin_save', { p_admin: key, p_id: l.id, p_owner_kind: l.ownerKind, p_code: l.code || null, p_published: l.published, p_sort: l.sort, p_data: d }).then(function (r) {
+      busy = false;
+      if (!r.ok) return msg(r.error);
+      var wasNew = l.isNew; l.isNew = false;
+      S.rpc('stays_admin_list', { p_admin: key }).then(function (x) {
+        if (x.ok) list = x.data || [];
+        var fresh = list.filter(function (y) { return y.id === l.id; })[0];
+        if (fresh) l.code = fresh.code || '';
+        if (wasNew) editor();
+        msg('Saved' + (l.published ? '. It\'s live on the site.' : '. Hidden from the site.'), true);
+      });
+    });
+  }
+
+  // ---------------------------------------------------------------- events
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('button, a'); if (!b) return;
+    if (b.dataset.ed) { var x = list.filter(function (l) { return l.id === b.dataset.ed; })[0]; ed = JSON.parse(JSON.stringify(x)); ed.data = ed.data || {}; ed.data.units = ed.data.units || []; ed.data.photos = ed.data.photos || []; editor(); scrollTo(0, 0); }
+    else if (b.id === 'new') { ed = blank(); editor(); scrollTo(0, 0); }
+    else if (b.id === 'out') { try { localStorage.removeItem('stays.admin'); } catch (er) {} key = ''; login(); }
+    else if (b.id === 'bk') { e.preventDefault(); home(); }
+    else if (b.id === 'sv') save();
+    else if (b.id === 'addu') { readForm(); ed.data.units.push({ key: 'u' + (ed.data.units.length + 1), name: '', weekday: '', weekend: '', included: 2, max: 4 }); unitsUI(); }
+    else if (b.id === 'cbtgu') { readForm(); ed.data.units = JSON.parse(JSON.stringify(CBTG_UNITS)); ed.data.checkIn = '4:00 PM'; ed.data.checkOut = '12:00 NN'; ed.data.extraFee = 600; ed.data.feePct = 30; editor(); msg('CBTG rates filled. Check them, then Save.', true); }
+    else if (b.dataset.rmu != null) { readForm(); ed.data.units.splice(Number(b.dataset.rmu), 1); unitsUI(); }
+    else if (b.id === 'addp') $('file').click();
+    else if (b.dataset.rmp != null) { readForm(); ed.data.photos.splice(Number(b.dataset.rmp), 1); photosUI(); msg('Photo removed. Tap Save to keep the change.', true); }
+    else if (b.dataset.mv != null) { readForm(); var i = Number(b.dataset.mv), j = i + Number(b.dataset.d), ps = ed.data.photos; var t = ps[i]; ps[i] = ps[j]; ps[j] = t; photosUI(); }
+    else if (b.id === 'del') {
+      if (!delArm) { delArm = true; b.textContent = 'Tap again to delete for good'; return; }
+      S.rpc('stays_admin_delete', { p_admin: key, p_id: ed.id }).then(function (r) { if (!r.ok) return msg(r.error); load(); });
+    }
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target.id === 'f_kind') { readForm(); editor(); }
+  });
+
+  if (key) load(); else login();
+})();
+</script>
+</body>
+</html>
