@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pinoy BnB Stays</title>
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 52'%3E%3Cpath d='M6 24 L28 8 L50 24 Z' fill='%23D9B45A'/%3E%3Crect x='12' y='24' width='32' height='14' fill='none' stroke='%23D9B45A' stroke-width='3'/%3E%3Cpath d='M15 38 V48 M41 38 V48 M28 38 V48' stroke='%23D9B45A' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Cormorant+Garamond:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<div class="dots" aria-hidden="true"></div>
+<div class="wrap">
+  <div id="hdr"></div>
+  <div class="stay" id="stay"><div class="empty">Loading…</div></div>
+</div>
+<div class="bar" id="bar" hidden></div>
+<script src="assets/app.js"></script>
+<script>
+(function () {
+  var S = STAYS, $ = function (id) { return document.getElementById(id); };
+  $('hdr').innerHTML = S.header('stays');
+  var qs = new URLSearchParams(location.search);
+  var st = { s: null, unit: '', ci: qs.get('in') || '', co: qs.get('out') || '', g: Number(qs.get('guests')) || 2, sending: false, done: null };
+  var bp = new URLSearchParams();
+  ['in', 'out', 'guests'].forEach(function (k) { if (qs.get(k)) bp.set(k, qs.get(k)); });
+  var back = './' + (bp.toString() ? '?' + bp : '');
+
+  S.rpc('stays_get', { p_id: qs.get('id') || '' }).then(function (r) {
+    if (!r.ok || !r.data) {
+      $('stay').innerHTML = '<a class="back" href="./">← All stays</a><div class="empty">' + (r.ok ? 'This stay is no longer listed.' : S.esc(r.error)) + '</div>';
+      return;
+    }
+    st.s = r.data;
+    var us = S.units(st.s);
+    var fits = us.filter(function (u) { return (Number(u.max) || Number(u.included) || 0) >= st.g; });
+    st.unit = (fits[0] || us[0] || {}).key || '';
+    if (st.ci && st.ci < S.today()) { st.ci = ''; st.co = ''; }
+    document.title = st.s.name + ' · Pinoy BnB Stays';
+    page();
+  });
+
+  function page() {
+    var s = st.s, photos = (s.photos || []).filter(Boolean), us = S.units(s);
+    var gal = photos.length
+      ? photos.slice(0, 5).map(function (p, i) { return '<button data-ph="' + i + '" aria-label="Open photo ' + (i + 1) + '"><img src="' + S.esc(p) + '" alt="" ' + (i ? 'loading="lazy"' : '') + '></button>'; }).join('') +
+        [1, 2, 3, 4].slice(photos.length - 1).map(function (k) { return '<div class="pad">' + S.art(s, k) + '</div>'; }).join('')
+      : '<div>' + S.art(s, 0) + '</div><div>' + S.art(s, 1) + '</div><div>' + S.art(s, 2) + '</div><div>' + S.art(s, 3) + '</div><div>' + S.art(s, 1) + '</div>';
+    var hl = (s.highlights || []).filter(Boolean);
+    var times = [s.checkIn && 'Check-in ' + s.checkIn, s.checkOut && 'Check-out ' + s.checkOut].filter(Boolean).join(' · ');
+    $('stay').innerHTML =
+      '<a class="back" href="' + back + '">← All stays</a>' +
+      '<h1>' + S.esc(s.name) + '</h1>' +
+      '<div class="sub"><b>' + S.esc(s.town || '') + '</b>' + (s.address ? '<span>· ' + S.esc(s.address) + '</span>' : '') + (s.direct ? '<span>· Book direct</span>' : '') + '</div>' +
+      '<div class="gal" id="gal">' + gal + (photos.length > 1 ? '<button class="more" data-ph="0">Show all ' + photos.length + ' photos</button>' : '') + '</div>' +
+      '<div class="cols"><div>' +
+        '<div class="sec host"><div class="av">' + S.esc((s.host || s.name || '?').trim().charAt(0).toUpperCase()) + '</div><div><b>Hosted by ' + S.esc(s.host || s.name) + '</b>' +
+          '<div class="note">' + S.esc(s.blurb || '') + '</div></div></div>' +
+        (s.description ? '<div class="sec"><h2>About this stay</h2><p>' + S.esc(s.description) + '</p></div>' : '') +
+        (hl.length ? '<div class="sec"><h2>What this place offers</h2><ul class="hl">' + hl.map(function (h) { return '<li>' + S.esc(h) + '</li>'; }).join('') + '</ul></div>' : '') +
+        '<div class="sec"><h2>Choose your ' + (us.length > 1 ? 'room or cabin' : 'stay') + '</h2><div class="units" id="units"></div></div>' +
+        '<div class="sec"><h2>Good to know</h2><p>' + S.esc([times, (s.extraFee ? 'Extra guest ' + S.peso(s.extraFee) + ' per night' : ''),
+          'Reservation fee ' + (s.feePct === '' || s.feePct == null ? 30 : s.feePct) + '% after the owner confirms', s.houseRules || ''].filter(Boolean).join('\n')) + '</p></div>' +
+      '</div><aside class="box" id="box"></aside></div>';
+    units(); box();
+  }
+
+  function units() {
+    var s = st.s;
+    $('units').innerHTML = S.units(s).map(function (u) {
+      var inc = Number(u.included) || 2, mx = Math.max(inc, Number(u.max) || inc);
+      return '<button class="unit" data-u="' + S.esc(u.key) + '" aria-pressed="' + (u.key === st.unit) + '"><span><b>' + S.esc(u.name) + '</b>' +
+        '<small>' + inc + ' guests included' + (mx > inc ? ' · up to ' + mx : '') + '</small></span>' +
+        '<span class="rt"><b>' + S.peso(u.weekday) + '</b> Sun–Thu' + (Number(u.weekend) && Number(u.weekend) !== Number(u.weekday) ? '<br><b>' + S.peso(u.weekend) + '</b> Fri–Sat' : '') + '</span></button>';
+    }).join('') || '<p>Rates coming soon.</p>';
+  }
+  document.addEventListener('click', function (e) {
+    var u = e.target.closest('[data-u]');
+    if (u && !st.done) { st.unit = u.dataset.u; clampGuests(); units(); box(); return; }
+    var p = e.target.closest('[data-ph]');
+    if (p) lightbox(Number(p.dataset.ph));
+  });
+
+  function unitObj() { return S.units(st.s).filter(function (u) { return u.key === st.unit; })[0]; }
+  function maxG() { var u = unitObj(); if (!u) return 1; var inc = Number(u.included) || 2; return Math.max(inc, Number(u.max) || inc); }
+  function clampGuests() { st.g = Math.min(Math.max(1, st.g), maxG()); }
+
+  function box() {
+    var s = st.s, el = $('box'), bar = $('bar');
+    if (st.done) {
+      el.innerHTML = '<div class="done"><div class="tick"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>' +
+        '<h3>Request sent</h3><div class="note">Your reference</div><div class="ref">' + S.esc(st.done.ref) + '</div>' +
+        '<p class="note" style="font-size:14px;color:var(--soft)">' + S.esc(s.host || s.name) + ' will text you on <b>' + S.esc(st.done.phone) + '</b> to confirm if your dates are free. ' +
+        'No payment yet. Once confirmed, you pay the ' + S.peso(st.done.fee) + ' reservation fee to the owner.</p>' +
+        '<a class="btn ghost small" href="./" style="margin-top:10px">Browse more stays</a></div>';
+      bar.hidden = true;
+      return;
+    }
+    clampGuests();
+    var q = S.quote(s, st.unit, st.ci, st.co, st.g), from = S.fromPrice(s), mx = maxG();
+    el.innerHTML =
+      '<div class="from">' + (q ? '<b>' + S.peso(q.total) + '</b> for ' + q.nights + (q.nights === 1 ? ' night' : ' nights') : (from ? 'from <b>' + S.peso(from) + '</b> night' : '')) + '</div>' +
+      '<div class="fields">' +
+        '<label><b>Check-in</b><input type="date" id="ci" min="' + S.today() + '" value="' + st.ci + '"></label>' +
+        '<label><b>Check-out</b><input type="date" id="co" min="' + (st.ci ? S.addDays(st.ci, 1) : S.addDays(S.today(), 1)) + '" value="' + st.co + '"></label>' +
+        (S.units(s).length > 1 ? '<label class="full"><b>Room or cabin</b><select id="un">' + S.units(s).map(function (u) {
+          return '<option value="' + S.esc(u.key) + '"' + (u.key === st.unit ? ' selected' : '') + '>' + S.esc(u.name) + '</option>'; }).join('') + '</select></label>' : '') +
+        '<label class="full"><b>Guests</b><span class="step"><span>' + st.g + (st.g === 1 ? ' guest' : ' guests') + ' <small style="color:var(--muted)">(up to ' + mx + ')</small></span>' +
+          '<span style="display:flex;gap:8px"><button type="button" id="gm" aria-label="Fewer guests"' + (st.g <= 1 ? ' disabled' : '') + '>−</button>' +
+          '<button type="button" id="gp" aria-label="More guests"' + (st.g >= mx ? ' disabled' : '') + '>+</button></span></span></label>' +
+      '</div>' +
+      (q ? '<div class="quote">' +
+          (q.wkN ? '<div><span>' + S.peso(q.wk) + ' × ' + q.wkN + (q.wkN === 1 ? ' night' : ' nights') + (q.weN ? ' (Sun–Thu)' : '') + '</span><span>' + S.peso(q.wk * q.wkN) + '</span></div>' : '') +
+          (q.weN ? '<div><span>' + S.peso(q.we) + ' × ' + q.weN + (q.weN === 1 ? ' night' : ' nights') + ' (Fri–Sat)</span><span>' + S.peso(q.we * q.weN) + '</span></div>' : '') +
+          (q.extra ? '<div><span>Extra guests: ' + q.extraGuests + ' × ' + S.peso(s.extraFee) + ' × ' + q.nights + '</span><span>' + S.peso(q.extra) + '</span></div>' : '') +
+          '<div class="tot"><span>Total</span><span>' + S.peso(q.total) + '</span></div>' +
+          '<div class="fee"><span>Reservation fee (' + q.pct + '%)</span><span>' + S.peso(q.fee) + '</span></div></div>'
+        : '<p class="note" style="margin:14px 0 0">Pick your dates to see the total.</p>') +
+      '<form class="form" id="f" novalidate>' +
+        '<label class="in">Your name<input id="nm" autocomplete="name" maxlength="80" required></label>' +
+        '<label class="in">Mobile number<input id="ph" type="tel" inputmode="tel" autocomplete="tel" placeholder="0917 123 4567" maxlength="20" required></label>' +
+        '<label class="in">Email (optional)<input id="em" type="email" autocomplete="email" maxlength="120"></label>' +
+        '<label class="in">Message to the owner (optional)<textarea id="nt" maxlength="500" placeholder="Occasion, arrival time, questions…"></textarea></label>' +
+        '<div class="err" id="err" role="alert"></div>' +
+        '<button class="btn" id="go" type="submit"' + (st.sending ? ' disabled' : '') + '>' + (st.sending ? 'Sending…' : 'Request to book') + '</button>' +
+        '<p class="note" style="margin:0;text-align:center">You won\'t pay anything yet. The owner confirms first.</p>' +
+      '</form>';
+    restore();
+    bar.hidden = false;
+    bar.innerHTML = '<div>' + (q ? '<b>' + S.peso(q.total) + '</b> · ' + q.nights + (q.nights === 1 ? ' night' : ' nights') : (from ? 'from <b>' + S.peso(from) + '</b> night' : '')) + '</div>' +
+      '<button class="btn small" type="button" id="jump">' + (q ? 'Request to book' : 'Check dates') + '</button>';
+  }
+
+  // Keep what the guest typed when the box redraws.
+  var typed = {};
+  function save() { ['nm', 'ph', 'em', 'nt'].forEach(function (k) { if ($(k)) typed[k] = $(k).value; }); }
+  function restore() { ['nm', 'ph', 'em', 'nt'].forEach(function (k) { if ($(k) && typed[k]) $(k).value = typed[k]; }); }
+  document.addEventListener('input', function (e) { if (/^(nm|ph|em|nt)$/.test(e.target.id)) save(); });
+  document.addEventListener('change', function (e) {
+    var id = e.target.id;
+    if (id === 'ci') { st.ci = e.target.value; if (st.ci && (!st.co || st.co <= st.ci)) st.co = S.addDays(st.ci, 1); box(); }
+    else if (id === 'co') { st.co = e.target.value; box(); }
+    else if (id === 'un') { st.unit = e.target.value; units(); box(); }
+  });
+  document.addEventListener('click', function (e) {
+    var id = e.target.closest('button') && e.target.closest('button').id;
+    if (id === 'gm') { st.g--; box(); }
+    else if (id === 'gp') { st.g++; box(); }
+    else if (id === 'jump') { $('box').scrollIntoView({ behavior: 'smooth', block: 'start' }); if (!st.ci) setTimeout(function () { $('ci').focus(); }, 400); }
+  });
+  document.addEventListener('submit', function (e) {
+    if (e.target.id !== 'f') return;
+    e.preventDefault(); save();
+    var err = function (m) { $('err').textContent = m; };
+    if (!st.ci || !st.co) return err('Pick your check-in and check-out dates.');
+    if ((typed.nm || '').trim().length < 2) return err('Type your name.');
+    var digits = (typed.ph || '').replace(/\D/g, '');
+    if (digits.length < 10 || digits.length > 13) return err('Type a valid mobile number, like 0917 123 4567.');
+    st.sending = true; box();
+    S.rpc('stays_request', { p_data: { listing: st.s.id, unit: st.unit, name: typed.nm.trim(), phone: typed.ph.trim(), email: (typed.em || '').trim(),
+      checkIn: st.ci, checkOut: st.co, guests: st.g, note: (typed.nt || '').trim() } }).then(function (r) {
+      st.sending = false;
+      if (!r.ok) { box(); err(r.error); return; }
+      var q = S.quote(st.s, st.unit, st.ci, st.co, st.g);
+      st.done = { ref: r.data.ref, phone: typed.ph.trim(), fee: r.data.fee != null ? r.data.fee : (q ? q.fee : 0) };
+      box(); $('box').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
+
+  function lightbox(i) {
+    var ps = (st.s.photos || []).filter(Boolean); if (!ps.length) return;
+    var d = document.createElement('div'); d.className = 'lb'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', 'Photos');
+    function show() {
+      d.innerHTML = '<img src="' + S.esc(ps[i]) + '" alt="Photo ' + (i + 1) + '"><button class="x" aria-label="Close">✕</button>' +
+        (ps.length > 1 ? '<button class="pv" aria-label="Previous">‹</button><button class="nx" aria-label="Next">›</button>' : '') + '<div class="ct">' + (i + 1) + ' / ' + ps.length + '</div>';
+    }
+    function close() { d.remove(); document.removeEventListener('keydown', key); }
+    function key(e) { if (e.key === 'Escape') close(); if (e.key === 'ArrowRight') { i = (i + 1) % ps.length; show(); } if (e.key === 'ArrowLeft') { i = (i - 1 + ps.length) % ps.length; show(); } }
+    d.addEventListener('click', function (e) {
+      if (e.target.closest('.x') || e.target === d) close();
+      else if (e.target.closest('.nx')) { i = (i + 1) % ps.length; show(); }
+      else if (e.target.closest('.pv')) { i = (i - 1 + ps.length) % ps.length; show(); }
+    });
+    var x0 = null;
+    d.addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+    d.addEventListener('touchend', function (e) { if (x0 == null) return; var dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 40) { i = (i + (dx < 0 ? 1 : -1) + ps.length) % ps.length; show(); } x0 = null; });
+    document.addEventListener('keydown', key);
+    show(); document.body.appendChild(d); d.querySelector('.x').focus();
+  }
+})();
+</script>
+</body>
+</html>
